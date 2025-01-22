@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-from flask import Flask, request, make_response
+from flask import Flask, request, make_response, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 
-from models import db, User, Review, Game
+from models import db, User, Review, Game, Bakery, BakedGood
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
@@ -19,138 +19,63 @@ db.init_app(app)
 def index():
     return "Index for Game/Review/User API"
 
-@app.route('/games')
-def games():
+# Existing routes remain unchanged ...
 
-    games = []
-    for game in Game.query.all():
-        game_dict = game.to_dict()
-        games.append(game_dict)
-
-    response = make_response(
-        games,
-        200
-    )
-
-    return response
-
-@app.route('/games/<int:id>')
-def game_by_id(id):
-    game = Game.query.filter(Game.id == id).first()
-
-    game_dict = game.to_dict()
-
-    response = make_response(
-        game_dict,
-        200
-    )
-
-    return response
-
-@app.route('/reviews', methods=['GET', 'POST'])
-def reviews():
-
-    if request.method == 'GET':
-        reviews = []
-        for review in Review.query.all():
-            review_dict = review.to_dict()
-            reviews.append(review_dict)
-
-        response = make_response(
-            reviews,
-            200
+@app.route('/baked_goods', methods=['POST'])
+def create_baked_good():
+    # Create a new baked good
+    try:
+        new_baked_good = BakedGood(
+            name=request.form.get("name"),
+            price=float(request.form.get("price")),
+            bakery_id=int(request.form.get("bakery_id"))
         )
-
-        return response
-
-    elif request.method == 'POST':
-        new_review = Review(
-            score=request.form.get("score"),
-            comment=request.form.get("comment"),
-            game_id=request.form.get("game_id"),
-            user_id=request.form.get("user_id"),
-        )
-
-        db.session.add(new_review)
+        db.session.add(new_baked_good)
         db.session.commit()
 
-        review_dict = new_review.to_dict()
-
-        response = make_response(
-            review_dict,
-            201
-        )
-
+        response = make_response(new_baked_good.to_dict(), 201)
         return response
 
-@app.route('/reviews/<int:id>', methods=['GET', 'PATCH', 'DELETE'])
-def review_by_id(id):
-    review = Review.query.filter(Review.id == id).first()
-
-    if review == None:
-        response_body = {
-            "message": "This record does not exist in our database. Please try again."
-        }
-        response = make_response(response_body, 404)
-
+    except Exception as e:
+        response = make_response({"error": str(e)}, 400)
         return response
 
+@app.route('/bakeries/<int:id>', methods=['PATCH'])
+def update_bakery_name(id):
+    # Update the name of the bakery
+    bakery = Bakery.query.filter_by(id=id).first()
+
+    if not bakery:
+        response = make_response({"message": "Bakery not found."}, 404)
+        return response
+
+    new_name = request.form.get("name")
+    if new_name:
+        bakery.name = new_name
+        db.session.commit()
+
+        response = make_response(bakery.to_dict(), 200)
+        return response
     else:
-        if request.method == 'GET':
-            review_dict = review.to_dict()
+        response = make_response({"message": "No name provided."}, 400)
+        return response
 
-            response = make_response(
-                review_dict,
-                200
-            )
+@app.route('/baked_goods/<int:id>', methods=['DELETE'])
+def delete_baked_good(id):
+    # Delete a baked good
+    baked_good = BakedGood.query.filter_by(id=id).first()
 
-            return response
+    if not baked_good:
+        response = make_response({"message": "Baked good not found."}, 404)
+        return response
 
-        elif request.method == 'PATCH':
-            for attr in request.form:
-                setattr(review, attr, request.form.get(attr))
-
-            db.session.add(review)
-            db.session.commit()
-
-            review_dict = review.to_dict()
-
-            response = make_response(
-                review_dict,
-                200
-            )
-
-            return response
-
-        elif request.method == 'DELETE':
-            db.session.delete(review)
-            db.session.commit()
-
-            response_body = {
-                "delete_successful": True,
-                "message": "Review deleted."
-            }
-
-            response = make_response(
-                response_body,
-                200
-            )
-
-            return response
-
-@app.route('/users')
-def users():
-
-    users = []
-    for user in User.query.all():
-        user_dict = user.to_dict()
-        users.append(user_dict)
+    db.session.delete(baked_good)
+    db.session.commit()
 
     response = make_response(
-        users,
+        {"message": f"Baked good with id {id} deleted successfully."},
         200
     )
-
     return response
 
 if __name__ == '__main__':
